@@ -167,3 +167,6 @@ Each shop has its own isolated database with full e-commerce schema, completely 
 3. **Phase 3**: Advanced privacy features
 4. **Phase 4**: Decentralization components
 5. **Phase 5**: Federation and interoperability
+
+**Created by: Tuomas Piirainen**
+**Last Updated: 06.08.2025**
