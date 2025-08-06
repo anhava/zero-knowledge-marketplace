@@ -1,0 +1,206 @@
+version: '3.8'
+
+services:
+  # Tor SOCKS proxy for all services
+  tor-proxy:
+    image: dperson/torproxy:latest
+    container_name: zkm-tor-proxy
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    ports:
+      - "9050:9050" # SOCKS proxy
+      - "9051:9051" # Control port
+    environment:
+      - TORUSER=zkm
+      - TOR_CONTROL_PASSWORD=${TOR_CONTROL_PASSWORD}
+    volumes:
+      - tor-data:/var/lib/tor
+      - ./tor/torrc:/etc/tor/torrc:ro
+
+  # PostgreSQL database (minimal data storage)
+  postgres:
+    image: postgres:15-alpine
+    container_name: zkm-postgres
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    environment:
+      POSTGRES_DB: zkm_platform
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key
+      -c shared_preload_libraries=pg_stat_statements
+      -c log_statement=none
+      -c log_connections=off
+      -c log_disconnections=off
+
+  # Redis for caching (non-sensitive data only)
+  redis:
+    image: redis:7-alpine
+    container_name: zkm-redis
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    volumes:
+      - redis-data:/data
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../src/api-gateway
+      dockerfile: Dockerfile
+    container_name: zkm-api-gateway
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    depends_on:
+      - postgres
+      - redis
+      - tor-proxy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/zkm_platform?sslmode=require
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      TOR_PROXY_HOST: tor-proxy
+      TOR_PROXY_PORT: 9050
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    volumes:
+      - ./configs/api:/app/config:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.services.api.loadbalancer.server.port=3000"
+
+  # Shop Deployment Service
+  deployment-service:
+    build:
+      context: ../src/deployment-service
+      dockerfile: Dockerfile
+    container_name: zkm-deployment-service
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/zkm_platform?sslmode=require
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DOCKER_HOST: unix:///var/run/docker.sock
+      TOR_CONTROL_PASSWORD: ${TOR_CONTROL_PASSWORD}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - shop-data:/data/shops
+      - ./configs/deployment:/app/config:ro
+
+  # Payment Verification Service
+  payment-service:
+    build:
+      context: ../src/payment-service
+      dockerfile: Dockerfile
+    container_name: zkm-payment-service
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/zkm_platform?sslmode=require
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      BLIND_SIGNATURE_KEY: ${BLIND_SIGNATURE_KEY}
+    volumes:
+      - ./configs/payment:/app/config:ro
+
+  # Frontend (Control Panel)
+  frontend:
+    build:
+      context: ../src/frontend
+      dockerfile: Dockerfile
+    container_name: zkm-frontend
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    depends_on:
+      - api-gateway
+    environment:
+      NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+      NEXT_PUBLIC_TOR_PROXY: socks5://tor-proxy:9050
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.10
+    container_name: zkm-traefik
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=ERROR"
+      - "--accesslog=false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-data:/letsencrypt
+
+  # Monitoring (Privacy-preserving)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: zkm-prometheus
+    restart: unless-stopped
+    networks:
+      - zkm-network
+    volumes:
+      - ./configs/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+
+networks:
+  zkm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  tor-data:
+  postgres-data:
+  redis-data:
+  shop-data:
+  traefik-data:
+  prometheus-data:
