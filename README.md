@@ -1,5 +1,8 @@
 # Zero-Knowledge Marketplace
 
+**Idea:** Tuomas Piirainen / tuomas@anhis.io
+**Updated:** 06.08.2025
+
 A privacy-focused marketplace platform that enables users to create anonymous e-commerce shops on the Tor network with cryptocurrency payment integration, following zero-knowledge principles.
 
 ## 🔐 Key Features
