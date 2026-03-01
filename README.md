@@ -1,6 +1,6 @@
 # Zero-Knowledge Marketplace
 
-**Idea:** Tuomas Piirainen / [Anhis Smart Innovations](https://anhis.fi/)/ tuomas@anhis.fi
+**Idea:** Tuomas Piirainen / [Anhis Smart Innovations](https://anhis.fi/) / tuomas@anhis.fi
 
 **Updated:** 01.02.2025
 
