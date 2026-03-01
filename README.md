@@ -1,7 +1,8 @@
 # Zero-Knowledge Marketplace
 
-**Idea:** Tuomas Piirainen / tuomas@anhis.io
-**Updated:** 06.08.2025
+**Idea:** Tuomas Piirainen / tuomas@anhis.fi
+**Updated:** 01.02.2025
+**Last update:** Published as open-source code
 
 A privacy-focused marketplace platform that enables users to create anonymous e-commerce shops on the Tor network with cryptocurrency payment integration, following zero-knowledge principles.
 
@@ -44,7 +45,7 @@ Each shop runs in complete isolation with its own:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/zero-knowledge-marketplace.git
+git clone https://github.com/anhava/zero-knowledge-marketplace.git
 cd zero-knowledge-marketplace
 ```
 
