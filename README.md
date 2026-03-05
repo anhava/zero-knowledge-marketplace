@@ -325,9 +325,7 @@ This software is provided for educational and legitimate business purposes only.
 
 ## 🆘 Support
 
-- Documentation: [docs.zkm.io](https://docs.zkm.io)
-- Community: [forum.zkm.io](https://forum.zkm.io)
-- Security Issues: security@zkm.io (PGP key available)
+- Security Issues: tuomas@anhis.fi (PGP key available)
 
 ## 🗺️ Roadmap
 
